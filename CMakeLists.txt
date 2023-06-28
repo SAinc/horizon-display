@@ -33,7 +33,7 @@ target_link_libraries(firmware
         pico_time
         hagl
         hagl_hal
-        VescUartPico)
+        vesc-uart-pico)
 
 add_subdirectory(external/vesc-uart-pico)
 add_subdirectory(external/hagl)
@@ -48,12 +48,6 @@ target_compile_definitions(firmware PRIVATE
 #  HAGL_HAL_PIXEL_SIZE=2
 )
 
-include("external/hagl_hal/cmake/generic-ili9341-320x240.cmake")
-
-# Add the standard include files to the build
-target_include_directories(firmware PRIVATE
-  ${CMAKE_CURRENT_LIST_DIR}
-  ${CMAKE_CURRENT_LIST_DIR}/.. # for our common lwipopts or any other standard includes, if required
-)
+include("external/hagl_pico_mipi/cmake/generic-ili9341-320x240.cmake")
 
 pico_add_extra_outputs(firmware)
