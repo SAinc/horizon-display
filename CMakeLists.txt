@@ -48,6 +48,6 @@ target_compile_definitions(firmware PRIVATE
 #  HAGL_HAL_PIXEL_SIZE=2
 )
 
-include("external/hagl_pico_mipi/cmake/generic-ili9341-320x240.cmake")
+include("generic-ili9341-320x240.cmake")
 
 pico_add_extra_outputs(firmware)
