@@ -30,6 +30,7 @@
 
 .idea
 .vscode
+.cache
 _deps
 cmake-*
 build
