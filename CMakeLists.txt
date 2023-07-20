@@ -40,11 +40,11 @@ add_subdirectory(external/hagl)
 add_subdirectory(external/hagl_pico_mipi)
 
 target_compile_definitions(firmware PRIVATE
-#  HAGL_HAL_USE_SINGLE_BUFFER
-  HAGL_HAL_USE_DOUBLE_BUFFER
+  HAGL_HAL_USE_SINGLE_BUFFER
+#  HAGL_HAL_USE_DOUBLE_BUFFER
 #  HAGL_HAL_USE_TRIPLE_BUFFER
 #  HAGL_HAL_USE_DMA
-  HAGL_HAL_DEBUG
+  HAGL_HAL_DEBUGS
 #  HAGL_HAL_PIXEL_SIZE=2
 )
 
