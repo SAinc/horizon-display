@@ -30,9 +30,10 @@ pico_enable_stdio_usb(firmware 1)
 # Add the standard library to the build
 target_link_libraries(firmware
         pico_stdlib
+        hardware_uart
         pico_time
-        hagl
         hagl_hal
+        hagl
         vesc-uart-pico)
 
 add_subdirectory(external/vesc-uart-pico)
@@ -44,10 +45,12 @@ target_compile_definitions(firmware PRIVATE
 #  HAGL_HAL_USE_DOUBLE_BUFFER
 #  HAGL_HAL_USE_TRIPLE_BUFFER
 #  HAGL_HAL_USE_DMA
-  HAGL_HAL_DEBUGS
+  HAGL_HAL_DEBUG
 #  HAGL_HAL_PIXEL_SIZE=2
 )
 
 include("generic-ili9341-320x240.cmake")
+
+string(APPEND CMAKE_EXE_LINKER_FLAGS "-Wl,--print-memory-usage")
 
 pico_add_extra_outputs(firmware)

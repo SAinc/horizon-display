@@ -6,7 +6,9 @@
 #include <hagl.h>
 
 #include "Background.h"
-#include "external/vesc-uart-pico/include/VescUartPico.h"
+#include "VescUartPico.h"
+
+#include <mipi_display.h>
 
 #define DEBUG true
 
@@ -27,7 +29,7 @@ static VescUartPico vesc = VescUartPico(TIMEOUT_MS, UART_INST, BAUD, PIN_TX, PIN
 
 // Init display and background objects
 static hagl_backend_t *display;
-static hagl_bitmap_t *background;
+//static hagl_bitmap_t *background;
 
 // init globals
 float batteryPercentage;
@@ -42,9 +44,10 @@ float speed_mph;
  * @param display hagl display surface to use
  *
  */
-void drawDisplay(hagl_backend_t* surface) {
+void drawDisplay(const hagl_backend_t* surface) {
     // draw background image
-    hagl_blit(surface, 0, 0, background);
+    //hagl_blit(surface, 0, 0, background);
+    mipi_display_write_xywh(0, 0, MIPI_DISPLAY_WIDTH, MIPI_DISPLAY_HEIGHT, (uint8_t*)BackgroundImage);
     // draw odometer (text)
     // draw trip (text)
     // draw speedometer indicator
@@ -100,16 +103,25 @@ void drawDisplay(hagl_backend_t* surface) {
 int main() {
     // init display
     stdio_init_all();
+    sleep_ms(10000);
+    vesc.init();
+    printf("Init");
     display = hagl_init();
+    //hagl_bitmap_init(background, BACKGROUND_WIDTH, BACKGROUND_HEIGHT, 8, (void*)BackgroundImage);
+    //background->buffer = BackgroundImage;
     hagl_clear(display);
+    drawDisplay(display);
 
     // init bitmaps
-    hagl_bitmap_init(background, BACKGROUND_WIDTH, BACKGROUND_HEIGHT, 16, (void*)BackgroundImage);
+
 
     // continuously try to get VESC data and update display
     while (true) {
+        //printf("Got data");
         if (getProcessTelemData()){    // get VESC data
-            drawDisplay(display);     // only update display if data has changed
+            //drawDisplay(display);     // only update display if data has changed
+            printf("%f", vesc.data.inpVoltage);
         }   // TODO: timeout
+        sleep_ms(50);
     }
 }
