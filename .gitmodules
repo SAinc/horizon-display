@@ -1,9 +1,3 @@
-[submodule "external/hagl"]
-	path = external/hagl
-	url = https://github.com/tuupola/hagl.git
-[submodule "external/hagl_pico_mipi"]
-	path = external/hagl_pico_mipi
-	url = https://github.com/tuupola/hagl_pico_mipi.git
 [submodule "external/vesc-uart-pico"]
 	path = external/vesc-uart-pico
 	url = https://github.com/SAinc/vesc-uart-pico.git

@@ -7,8 +7,15 @@
 
 #include "Background.h"
 #include "VescUartPico.h"
+#include "hagl/char.h"
+#include "hagl_hal_color.h"
 
 #include <mipi_display.h>
+#include "font10x20-ISO8859-1.h"
+#include "play_12px.h"
+//#include "roboto_12.h"
+#include "roboto_12.fnt.h"
+#include "play_90px_numbers.h"
 
 #define DEBUG true
 
@@ -29,7 +36,6 @@ static VescUartPico vesc = VescUartPico(TIMEOUT_MS, UART_INST, BAUD, PIN_TX, PIN
 
 // Init display and background objects
 static hagl_backend_t *display;
-//static hagl_bitmap_t *background;
 
 // init globals
 float batteryPercentage;
@@ -37,6 +43,10 @@ float tripCounter;
 float odometer;
 float power;
 float speed_mph;
+
+// Define colors
+// white
+hagl_color_t white = 0xffff;
 
 /**
  * @brief Redraw entire display screen
@@ -46,9 +56,10 @@ float speed_mph;
  */
 void drawDisplay(const hagl_backend_t* surface) {
     // draw background image
-    //hagl_blit(surface, 0, 0, background);
     mipi_display_write_xywh(0, 0, MIPI_DISPLAY_WIDTH, MIPI_DISPLAY_HEIGHT, (uint8_t*)BackgroundImage);
     // draw odometer (text)
+    hagl_put_text(surface, L"ODO: 1000 mi", 5, 220, white, play_12px_fnt);
+    hagl_put_text(surface, L"25", 60, 74, white, play_90px_numbers_fnt);
     // draw trip (text)
     // draw speedometer indicator
     // draw speedometer value (text)
@@ -103,23 +114,17 @@ void drawDisplay(const hagl_backend_t* surface) {
 int main() {
     // init display
     stdio_init_all();
-    sleep_ms(10000);
+    sleep_ms(5000);
     vesc.init();
-    printf("Init");
     display = hagl_init();
-    //hagl_bitmap_init(background, BACKGROUND_WIDTH, BACKGROUND_HEIGHT, 8, (void*)BackgroundImage);
-    //background->buffer = BackgroundImage;
     hagl_clear(display);
     drawDisplay(display);
-
-    // init bitmaps
-
 
     // continuously try to get VESC data and update display
     while (true) {
         //printf("Got data");
         if (getProcessTelemData()){    // get VESC data
-            //drawDisplay(display);     // only update display if data has changed
+            drawDisplay(display);     // only update display if data has changed
             printf("%f", vesc.data.inpVoltage);
         }   // TODO: timeout
         sleep_ms(50);
