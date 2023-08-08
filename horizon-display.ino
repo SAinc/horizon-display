@@ -68,7 +68,9 @@ float vbat = 0;
 float temp = 0;
 
 float powerSamples[NUM_SAMPLES_POWER] = {0};
+uint16_t index = 0;
 
+// initialize as NAN so that we always draw values the first execution
 float odometerPrev = NAN;
 float tripCounterPrev = NAN;
 float speedPrev = NAN;
@@ -205,13 +207,19 @@ int getProcessTelemData() {
         vbat = vesc.data.inpVoltage;
         // calculate motor power
         float powerRaw = vesc.data.inpVoltage * vesc.data.avgMotorCurrent;
+
         // take running average of power to smooth it out
         powerSamples[index] = powerRaw;
+        // wrap index at sample size
+        if (++index <= NUM_SAMPLES_POWER) {
+            index = 0;
+        }
         power = 0;
         for (int i = 0; i < NUM_SAMPLES_POWER; i++) {
             power += powerSamples[i];
         }
         power /= NUM_SAMPLES_POWER;
+
         // calculate speedometer value
         speed_mph = vesc.data.rpm/(NUM_MAGNETS/2) * CONVERSION_FACTOR_MPH;
         // calculate trip distance
