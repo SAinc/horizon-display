@@ -1,3 +1,0 @@
-[submodule "external/vesc-uart-pico"]
-	path = external/vesc-uart-pico
-	url = https://github.com/SAinc/vesc-uart-pico.git
