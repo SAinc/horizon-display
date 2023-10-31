@@ -24,12 +24,15 @@
 #define NUM_CELLS               14                  // number of battery cells
 #define V_MAX                   NUM_CELLS * 4.2     // max battery voltage
 #define V_MIN                   NUM_CELLS * 3.3     // min battery voltage
-#define WHEEL_DIA               200                 // wheel diameter in mm
+#define WHEEL_DIA               285.75              // wheel diameter in mm
 #define NUM_MAGNETS             30                  // number of magnets on the stator
+#define CAN_ID_1                0                   // CAN id of first controller
+#define CAN_ID_2                99                  // CAN id of second controller
 
 // COLORS
 #define COLOR_BACKGROUND        0x18c3      // 0x1a1a1a
-#define COLOR_NEEDLE            0xfa80      // 0xff5000
+#define COLOR_NEEDLE_PRI        0xfc04      // 0xff8255
+#define COLOR_NEEDLE_SEC        0x267f      // 0x25d0ff
 #define COLOR_WARNING           0xfbc5      // 0xff7a2a
 #define COLOR_TEXT_SECONDARY    0xcc79      // 0xcccccc
 
@@ -41,7 +44,7 @@
 #define BATTERY_CENTER_Y        54          // center of battery meter y coord
 
 #define EEPROM_ADDR             0           // address to store odometer value
-#define NUM_SAMPLES_POWER       16          // number of samples to use for rolling average
+#define NUM_SAMPLES_POWER       1          // number of samples to use for rolling average
 
 
 // CONSTANTS
@@ -54,27 +57,30 @@ TFT_eSprite speedometerNeedle = TFT_eSprite(&tft);
 TFT_eSprite powerNeedle = TFT_eSprite(&tft);
 TFT_eSprite batteryNeedle = TFT_eSprite(&tft);
 
-// Initialize VESC connection
-VescUart vesc;
+// Initialize VESC connections
+VescUart vesc1;
+VescUart vesc2;
 
 // globl vars
 uint32_t updateTime = 0;    // time for next update
 float batteryPercentage = 0;
 float tripCounter = 0;
 float odometer = 772.5;
-float power = 0;
+float power1 = 0;
+float power2 = 0;
 float speed_mph = 0;
 float vbat = 0;
 float temp = 0;
 
 float powerSamples[NUM_SAMPLES_POWER] = {0};
-uint16_t index = 0;
+uint16_t powerSampleIndex = 0;
 
 // initialize as NAN so that we always draw values the first execution
 float odometerPrev = NAN;
 float tripCounterPrev = NAN;
 float speedPrev = NAN;
-float powerPrev = NAN;
+float power1Prev = NAN;
+float power2Prev = NAN;
 float batteryPercentagePrev = NAN;
 float vbatPrev = NAN;
 float tempPrev = NAN;
@@ -115,10 +121,11 @@ void setup(void) {
 
     EEPROM.begin(256);  // start emulated eeprom with 256 byte length
 
-    vesc.setSerialPort(&Serial1);    // set serial port to use
+    vesc1.setSerialPort(&Serial1);    // set serial port to use
+    vesc2.setSerialPort(&Serial1);
 
     #ifdef DEBUG
-        vesc.setDebugPort(&Serial);
+        vesc1.setDebugPort(&Serial);
     #endif
 
     tft.begin();
@@ -132,7 +139,7 @@ void setup(void) {
     tft.unloadFont();
 
     #ifndef TEST
-        while (!vesc.getFWversion()) {
+        while (!vesc1.getFWversion()) {
             #ifdef DEBUG
                 Serial.println("Error: Could not connect to VESC!");
             #endif
@@ -147,13 +154,13 @@ void setup(void) {
     tft.pushImage(0, 0, BACKGROUND_WIDTH, BACKGROUND_HEIGHT, BackgroundImage);
 
     tft.setPivot(SPEEDOMETER_CENTER_X, SPEEDOMETER_CENTER_Y);   // set pivot for speedometer
-    createSpeedometerNeedle(COLOR_NEEDLE);
+    createSpeedometerNeedle(COLOR_NEEDLE_PRI);
 
     tft.setPivot(POWER_CENTER_X, POWER_CENTER_Y);   // set pivot for power meter
-    createPowerNeedle(COLOR_NEEDLE);
+    createPowerNeedle(COLOR_NEEDLE_PRI);
 
     tft.setPivot(BATTERY_CENTER_X, BATTERY_CENTER_Y);   // set pivot for battery meter
-    createBatteryNeedle(COLOR_NEEDLE);
+    createBatteryNeedle(COLOR_NEEDLE_PRI);
 
     // restore odometer value
     //EEPROM.get(EEPROM_ADDR, odometer);
@@ -201,32 +208,34 @@ void loop(void) {
  */
 int getProcessTelemData() {
     // only recalculate if we have an update
-    if (vesc.getVescValues()){
+    if (vesc1.getVescValues(CAN_ID_1) || vesc2.getVescValues(CAN_ID_2)){
         // calculate battery percent
-        batteryPercentage = (vesc.data.inpVoltage - V_MIN) / (V_MAX - V_MIN) * 100;
-        vbat = vesc.data.inpVoltage;
+        batteryPercentage = (vesc1.data.inpVoltage - V_MIN) / (V_MAX - V_MIN) * 100;
+        vbat = vesc1.data.inpVoltage;
         // calculate motor power
-        float powerRaw = vesc.data.inpVoltage * vesc.data.avgMotorCurrent;
+        float power1 = vesc1.data.inpVoltage * vesc1.data.avgMotorCurrent;
+        float power2 = vesc2.data.inpVoltage * vesc2.data.avgMotorCurrent;
 
-        // take running average of power to smooth it out
-        powerSamples[index] = powerRaw;
-        // wrap index at sample size
-        if (++index <= NUM_SAMPLES_POWER) {
-            index = 0;
-        }
-        power = 0;
-        for (int i = 0; i < NUM_SAMPLES_POWER; i++) {
-            power += powerSamples[i];
-        }
-        power /= NUM_SAMPLES_POWER;
+        // // take running average of power to smooth it out
+        // powerSamples[powerSampleIndex] = power1Raw;
+        // // wrap powerSampleIndex at sample size
+        // if (++powerSampleIndex <= NUM_SAMPLES_POWER) {
+        //     powerSampleIndex = 0;
+        // }
+        // power1 = 0;
+        // power2 = 0;
+        // for (int i = 0; i < NUM_SAMPLES_POWER; i++) {
+        //     power1 += powerSamples[i];
+        // }
+        // power1 = power1 / NUM_SAMPLES_POWER;
 
         // calculate speedometer value
-        speed_mph = vesc.data.rpm/(NUM_MAGNETS/2) * CONVERSION_FACTOR_MPH;
+        speed_mph = vesc1.data.rpm/(NUM_MAGNETS/2) * CONVERSION_FACTOR_MPH;
         // calculate trip distance
-        tripCounter = vesc.data.tachometer/(3 * (NUM_MAGNETS/2)) * CONVERSION_FACTOR_MI;
+        tripCounter = vesc1.data.tachometer/(3 * (NUM_MAGNETS)) * CONVERSION_FACTOR_MI;
         // calculate and store odometer every 0.1mi
-        EEPROM.put(EEPROM_ADDR, odometer);
-        temp = vesc.data.tempMosfet;
+        //EEPROM.put(EEPROM_ADDR, odometer);
+        temp = vesc1.data.tempMosfet;
         return 1;
     }
     return 0;
@@ -271,19 +280,33 @@ void updateDisplay() {
         speedPrev = speed_mph;
     }
     // check if power has changed
-    if (!equalFloat(power, powerPrev, 10)) {
+    if (!equalFloat(power1, power1Prev, 10)) {
         // draw power indicator
         // draw power value (text)
         tft.setTextColor(TFT_WHITE, TFT_BLACK, true);
         tft.loadFont(Play_Regular48);
         tft.setCursor(217, 121);
-        tft.printf("%2.0f  ", round(std::abs(power)/100, 0) );
+        tft.printf("%2.0f  ", round(std::abs(power1)/100, 0) );
         tft.unloadFont();
         tft.setPivot(POWER_CENTER_X, POWER_CENTER_Y);   // set pivot for power meter
-        drawPowerMeterNeedle(power/100);
+        drawPowerMeterNeedle(power1/100);
         // store current power value
-        powerPrev = power;
+        power1Prev = power1;
     }
+    // check if power has changed
+    // if (!equalFloat(power2, power2Prev, 10)) {
+    //     // draw power indicator
+    //     // draw power value (text)
+    //     tft.setTextColor(TFT_WHITE, TFT_BLACK, true);
+    //     tft.loadFont(Play_Regular48);
+    //     tft.setCursor(217, 121);
+    //     tft.printf("%2.0f  ", round(std::abs(power2)/100, 0) );
+    //     tft.unloadFont();
+    //     tft.setPivot(POWER_CENTER_X, POWER_CENTER_Y);   // set pivot for power meter
+    //     drawPowerMeterNeedle(power2/100);
+    //     // store current power value
+    //     power2Prev = power2;
+    // }
     // check if battery has changed
     if (!equalFloat(batteryPercentage, batteryPercentagePrev, 1)) {
         // draw battery indicator
