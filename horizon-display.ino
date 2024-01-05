@@ -5,64 +5,63 @@
 
 // images and fonts
 #include "Background.h"
-#include "Play_Regular16.h"
-#include "Play_Regular18.h"
+#include "7-Segment24.h"
+#include "7-Segment40.h"
+#include "7-Segment108.h"
 #include "Play_Regular20.h"
-#include "Play_Regular48.h"
-#include "Play_Regular86.h"
 
-//#define DEBUG
-//#define TEST
+// #define DEBUG
+ #define TEST
 
 // DEFINES
-#define LOOP_PERIOD             35                  // loop period in ms
-#define PIN_TX                  28                  // UART tx pin
-#define PIN_RX                  29                  // UART rx pin
-#define PIN_POWER               
-#define TIMEOUT_MS              100                 // timeout for recv
-#define BAUD                    115200              // baudrate for VESC UART
-#define NUM_CELLS               14                  // number of battery cells
-#define V_MAX                   NUM_CELLS * 4.2     // max battery voltage
-#define V_MIN                   NUM_CELLS * 3.3     // min battery voltage
-#define WHEEL_DIA               285.75              // wheel diameter in mm
-#define NUM_MAGNETS             30                  // number of magnets on the stator
-#define CAN_ID_1                0                  // CAN id of first controller
-#define CAN_ID_2                99                  // CAN id of second controller
+#define LOOP_PERIOD 35 // loop period in ms
+#define PIN_TX 28      // UART tx pin
+#define PIN_RX 29      // UART rx pin
+#define PIN_POWER
+#define TIMEOUT_MS 100        // timeout for recv
+#define BAUD 115200           // baudrate for VESC UART
+#define NUM_CELLS 14          // number of battery cells
+#define V_MAX NUM_CELLS * 4.2 // max battery voltage
+#define V_MIN NUM_CELLS * 3.2 // min battery voltage
+#define WHEEL_DIA 285.75      // wheel diameter in mm
+#define NUM_MAGNETS 30        // number of magnets on the stator
+#define CAN_ID_1 0            // CAN id of first controller
+#define CAN_ID_2 85           // CAN id of second controller
 
 // COLORS
-#define COLOR_BACKGROUND        0x18c3      // 0x1a1a1a
-#define COLOR_NEEDLE_PRI        0xfc04      // 0xff8255
-#define COLOR_NEEDLE_SEC        0x267f      // 0x25d0ff
-#define COLOR_WARNING           0xfbc5      // 0xff7a2a
-#define COLOR_TEXT_SECONDARY    0xcc79      // 0xcccccc
+#define COLOR_METER_BACKGROUND 0x18c3     // 0x1a1a1a
+#define COLOR_METER_GOOD 0x4746     // 0x45eb32
+#define COLOR_METER_REGULAR 0x25be  // 24b5fa
+#define COLOR_METER_REGULAR_2 0xe401    // 0xe38205
+#define COLOR_METER_WARNING 0xff83  // 0xfcf115
+#define COLOR_METER_BAD 0xf124     // 0xfa2424
+#define COLOR_WARNING 0xfbc5        // 0xff7a2a
+#define COLOR_TEXT_SECONDARY 0xcc79 // 0xcccccc
 
-#define SPEEDOMETER_CENTER_X    105         // center of speedometer x coord
-#define SPEEDOMETER_CENTER_Y    105         // center of speedometer y coord
-#define POWER_CENTER_X          245         // center of power meter x coord
-#define POWER_CENTER_Y          140         // center of power meter y coord
-#define BATTERY_CENTER_X        198         // center of battery meter x coord
-#define BATTERY_CENTER_Y        54          // center of battery meter y coord
+#define POWER_METER_X 159           // power meter x coord
+#define POWER_METER_Y 108           // power meter y coord
+#define BATTERY_X 300               // battery meter x coord
+#define BATTERY_Y 165               // battery meter y coord
+#define TEMP_X 5                    // temp meter x coord
+#define TEMP_Y 165                  // temp meter y coord
+#define POWER_METER_THICKNESS 10    // thickness of power meter segment
+#define POWER_METER_RADIUS 82       // radius of power meter segment
 
-#define EEPROM_ADDR             0           // address to store odometer value
-#define NUM_SAMPLES_POWER       1          // number of samples to use for rolling average
-
+#define EEPROM_ADDR 0       // address to store odometer value
+#define NUM_SAMPLES_POWER 1 // number of samples to use for rolling average
 
 // CONSTANTS
-static const double CONVERSION_FACTOR_MPH = PI * WHEEL_DIA * 0.0000372902;   // obtained by mm/min -> mi/hr
+static const double CONVERSION_FACTOR_MPH = PI * WHEEL_DIA * 0.0000372902; // obtained by mm/min -> mi/hr
 static const double CONVERSION_FACTOR_MI = PI * WHEEL_DIA / 1.609e+6;
 
 // Initialize TFT and sprites
 TFT_eSPI tft = TFT_eSPI();
-TFT_eSprite speedometerNeedle = TFT_eSprite(&tft);
-TFT_eSprite powerNeedle1 = TFT_eSprite(&tft);
-TFT_eSprite powerNeedle2 = TFT_eSprite(&tft);
-TFT_eSprite batteryNeedle = TFT_eSprite(&tft);
 
 // Initialize VESC connections
 VescUart vesc(100);
 
 // globl vars
-uint32_t updateTime = 0;    // time for next update
+uint32_t updateTime = 0; // time for next update
 float batteryPercentage = 0;
 float tripCounter = 0;
 float odometer = 772.5;
@@ -85,54 +84,29 @@ float batteryPercentagePrev = NAN;
 float vbatPrev = NAN;
 float tempPrev = NAN;
 
-// buffers to store image sections for erasing needles
-uint16_t* speedometerBuffer;
-uint16_t* powerBuffer1;
-uint16_t* powerBuffer2;
-uint16_t* batteryBuffer;
+uint16_t powerAngle1_prev = 315;
+uint16_t powerAngle2_prev = 315;
+uint16_t batteryMeterPrev = 0;
+uint16_t tempMeterPrev = 0;
 
-bool speedometerBufferLoaded = false;
-bool powerBuffer1Loaded = false;
-bool powerBuffer2Loaded = false;
-bool batteryBufferLoaded = false;
-
-int16_t SpMin_x;
-int16_t SpMin_y;
-int16_t SpMax_x;
-int16_t SpMax_y;
-
-int16_t PwMin_x1;
-int16_t PwMin_y1;
-int16_t PwMax_x1;
-int16_t PwMax_y1;
-int16_t PwMin_x2;
-int16_t PwMin_y2;
-int16_t PwMax_x2;
-int16_t PwMax_y2;
-
-int16_t BtMin_x;
-int16_t BtMin_y;
-int16_t BtMax_x;
-int16_t BtMax_y;
-
-
-void setup(void) {
-    #ifdef DEBUG
-        Serial.begin(115200);
-    #endif
+void setup(void)
+{
+#ifdef DEBUG
+    Serial.begin(115200);
+#endif
 
     Serial1.setRX(PIN_RX);
     Serial1.setTX(PIN_TX);
-    Serial1.begin(BAUD);    // start uart0
+    Serial1.begin(BAUD); // start uart0
 
-    //EEPROM.begin(256);  // start emulated eeprom with 256 byte length
+    // EEPROM.begin(256);  // start emulated eeprom with 256 byte length
 
-    #ifdef DEBUG
-        vesc.setDebugPort(&Serial);
-    #endif
+#ifdef DEBUG
+    vesc.setDebugPort(&Serial);
+#endif
 
     tft.begin();
-    tft.setRotation(1);     // set orientation to landscape
+    tft.setRotation(1); // set orientation to landscape
     tft.fillScreen(TFT_BLACK);
     // draw ON screen
     tft.loadFont(Play_Regular20);
@@ -143,86 +117,85 @@ void setup(void) {
 
     delay(5000);
 
-    vesc.setSerialPort(&Serial1);    // set serial port to use
+    vesc.setSerialPort(&Serial1); // set serial port to use
 
-    #ifndef TEST
-        while (!vesc.getFWversion(CAN_ID_1)) {
-            delay(1);
-            #ifdef DEBUG
-                Serial.println("Error: Could not connect to VESC!");
-            #endif
-        }
-    #endif
+#ifndef TEST
+    while (!vesc.getFWversion(CAN_ID_1))
+    {
+        delay(1);
+#ifdef DEBUG
+        Serial.println("Error: Could not connect to VESC!");
+#endif
+    }
+#endif
 
-    #ifdef DEBUG
-        delay(5000);
-    #endif
+#ifdef DEBUG
+    delay(5000);
+#endif
 
     // draw initial background image
     tft.pushImage(0, 0, BACKGROUND_WIDTH, BACKGROUND_HEIGHT, BackgroundImage);
 
-    tft.setPivot(SPEEDOMETER_CENTER_X, SPEEDOMETER_CENTER_Y);   // set pivot for speedometer
-    createSpeedometerNeedle(COLOR_NEEDLE_PRI);
-
-    tft.setPivot(POWER_CENTER_X, POWER_CENTER_Y);   // set pivot for power meter
-    createPowerNeedles(COLOR_NEEDLE_PRI, COLOR_NEEDLE_SEC);
-
-    tft.setPivot(BATTERY_CENTER_X, BATTERY_CENTER_Y);   // set pivot for battery meter
-    createBatteryNeedle(COLOR_NEEDLE_PRI);
-
     // restore odometer value
-    //EEPROM.get(EEPROM_ADDR, odometer);
+    // EEPROM.get(EEPROM_ADDR, odometer);
 }
 
-void loop(void) {
+void loop(void)
+{
     // if (!digitalRead(PIN_POWER)) {
     //     shutdown();
     // }
 
-    if (updateTime <= millis()) {
+    if (updateTime <= millis())
+    {
         updateTime = millis() + LOOP_PERIOD;
 
-        #ifdef TEST
-            // update values without needing VESC connection
-            updateDisplay();
+#ifdef TEST
+        // update values without needing VESC connection
+        updateDisplay();
 
-            if (++batteryPercentage > 100)
-                batteryPercentage = 0;
-            if (++tripCounter > 15)
-                tripCounter = 0;
-            if ((odometer += 10) > 1000)
-                odometer = 0;
-            if ((power += 10) > 2500)
-                power = -1000;
-            if (++speed_mph > 35)
-                speed_mph = 0;
-            if (++vbat > 58.8)
-                vbat = 0;
-            if (++temp > 45)
-                temp = 12;
-        #endif
-        #ifndef TEST
-            if (getProcessTelemData()) {
-                updateDisplay();
-            }
-        #endif
+        if (++batteryPercentage > 100)
+            batteryPercentage = 0;
+        if (++tripCounter > 15)
+            tripCounter = 0;
+        if ((odometer += 10) > 1000)
+            odometer = 0;
+        if ((power1 += 50) > 6000)
+            power1 = -2000;
+        if ((power2 += 50) > 6000)
+            power2 = -2000;
+        if (++speed_mph > 45)
+            speed_mph = 0;
+        if (++vbat > V_MAX)
+            vbat = V_MIN;
+        if (++temp > 90)
+            temp = 12;
+#endif
+#ifndef TEST
+        if (getProcessTelemData())
+        {
+            updateDisplay();
+        }
+#endif
     }
 }
 
 /**
  * @brief Get and process telemetry data from the connected VESC
- * 
+ *
  * @return int return code
  */
-int getProcessTelemData() {
+int getProcessTelemData()
+{
     // only recalculate if we have an update
-    if (vesc.getVescValues(CAN_ID_1)){
+    if (vesc.getVescValues(CAN_ID_1))
+    {
         // calculate battery percent
         batteryPercentage = (vesc.data.inpVoltage - V_MIN) / (V_MAX - V_MIN) * 100;
         vbat = vesc.data.inpVoltage;
         // calculate motor power
         power1 = vesc.data.inpVoltage * vesc.data.avgMotorCurrent;
-    
+
         // // take running average of power to smooth it out
         // powerSamples[powerSampleIndex] = power1Raw;
         // // wrap powerSampleIndex at sample size
@@ -237,357 +210,287 @@ int getProcessTelemData() {
         // power1 = power1 / NUM_SAMPLES_POWER;
 
         // calculate speedometer value
-        speed_mph = vesc.data.rpm/(NUM_MAGNETS/2) * CONVERSION_FACTOR_MPH;
+        speed_mph = vesc.data.rpm / (NUM_MAGNETS / 2) * CONVERSION_FACTOR_MPH;
         // calculate trip distance
-        tripCounter = vesc.data.tachometer/(3 * (NUM_MAGNETS)) * CONVERSION_FACTOR_MI;
+        tripCounter = vesc.data.tachometer / (3 * (NUM_MAGNETS)) * CONVERSION_FACTOR_MI;
         // calculate and store odometer every 0.1mi
-        //EEPROM.put(EEPROM_ADDR, odometer);
+        // EEPROM.put(EEPROM_ADDR, odometer);
         temp = vesc.data.tempMosfet;
-        // vesc.getVescValues(CAN_ID_2);
-        //power2 = vesc.data.inpVoltage * vesc.data.avgMotorCurrent;
-        power2 = 0;
+        vesc.getVescValues(CAN_ID_2);
+        power2 = vesc.data.inpVoltage * vesc.data.avgMotorCurrent;
+        // power2 = 0;
 
         return 1;
     }
     return 0;
 }
 
-void updateDisplay() {
+void updateDisplay()
+{
     // check if odometer has changed
-    if (!equalFloat(odometer, odometerPrev, 0.1)) {
-        // draw odometer
-        tft.setTextColor(TFT_WHITE, TFT_BLACK, true);
-        tft.loadFont(Play_Regular20);
-        tft.setCursor(3, 222);
-        tft.printf("ODO: %.1f mi      ", round(odometer, 1) );
+    if (!equalFloat(odometer, odometerPrev, 0.1))
+    {
+        // draw odometer text
+        tft.loadFont(Seven_Segment24);
+        tft.setCursor(47, 216);
+        tft.setTextColor(COLOR_METER_BACKGROUND, TFT_BLACK);
+        tft.printf("88888.8");
+        tft.setCursor(47, 216);
+        tft.setTextColor(TFT_WHITE, TFT_BLACK);
+        tft.printf("%7.1f", round(odometer, 1));
         tft.unloadFont();
         // store current odometer value
         odometerPrev = odometer;
     }
     // check if trip counter has changed
-    if (!equalFloat(tripCounter, tripCounterPrev, 0.1)) {
+    if (!equalFloat(tripCounter, tripCounterPrev, 0.1))
+    {
         // draw trip (text)
         odometer += tripCounter;
-        tft.setTextColor(TFT_WHITE, TFT_BLACK, true);
-        tft.loadFont(Play_Regular20);
-        tft.setCursor(196, 222);
-        tft.printf("TRIP: %.1f mi    ", round(tripCounter, 1) );
+        tft.loadFont(Seven_Segment24);
+        tft.setTextColor(COLOR_METER_BACKGROUND, TFT_BLACK);
+        tft.setCursor(271, 216);
+        tft.printf("888.8");
+        tft.setCursor(271, 216);
+        tft.setTextColor(TFT_WHITE, TFT_BLACK);
+        tft.printf("%5.1f", round(tripCounter, 1));
         tft.unloadFont();
         // store current trip value
         tripCounterPrev = tripCounter;
     }
     // check if speedometer value has changed
-    if (!equalFloat(speed_mph, speedPrev, 0.1)) {
-        // draw speedometer indicator
+    if (!equalFloat(speed_mph, speedPrev, 0.1))
+    {
         // draw speedometer value (text)
-        tft.setTextColor(TFT_WHITE, TFT_BLACK, true);
-        tft.loadFont(Play_Regular86);
-        tft.setCursor(55, 71);
-        tft.printf("%2.0f ", round(std::abs(speed_mph), 0) );
+        tft.loadFont(Seven_Segment108);
+        tft.setTextColor(COLOR_METER_BACKGROUND, TFT_BLACK);
+        tft.setCursor(107, 55);
+        tft.printf("88");
+        tft.setCursor(107 , 55);
+        tft.setTextColor(TFT_WHITE, TFT_BLACK);
+        tft.printf("%2.0f", round(std::abs(speed_mph), 0));
         tft.unloadFont();
-        tft.setPivot(SPEEDOMETER_CENTER_X, SPEEDOMETER_CENTER_Y);   // set pivot for speedometer
-        drawSpeedometerNeedle(std::abs(speed_mph));
         // store current speed value
         speedPrev = speed_mph;
     }
     // check if power has changed
-    if ((!equalFloat(power1, power1Prev, 10) ) || (!equalFloat(power2, power2Prev, 10) )) {
+    if ((!equalFloat(power1, power1Prev, 10)) || (!equalFloat(power2, power2Prev, 10)))
+    {
         // draw power indicator
         // draw power value (text)
-        tft.setTextColor(TFT_WHITE, TFT_BLACK, true);
-        tft.loadFont(Play_Regular48);
-        tft.setCursor(217, 121);
-        tft.printf("%2.0f  ", round(std::abs(power1)/100, 0) );
+        tft.loadFont(Seven_Segment40);
+        tft.setTextColor(COLOR_METER_BACKGROUND, TFT_BLACK);
+        tft.setCursor(144, 173);
+        tft.printf("88");
+        tft.setCursor(144, 173);
+        tft.setTextColor(TFT_WHITE, TFT_BLACK);
+        tft.printf("%2.0f", round(std::abs(power1) / 100, 0));
         tft.unloadFont();
-        tft.setPivot(POWER_CENTER_X, POWER_CENTER_Y);   // set pivot for power meter
-        drawPowerMeterNeedles(power1/100, power2/100);
+        drawPowerMeter(power1, power2);
         // store current power value
         power1Prev = power1;
         power2Prev = power2;
     }
     // check if battery has changed
-    if (!equalFloat(batteryPercentage, batteryPercentagePrev, 1)) {
-        // draw battery indicator
+    if (!equalFloat(batteryPercentage, batteryPercentagePrev, 1))
+    {
+        // draw battery meter
         // draw battery percent (text)
-        tft.setTextColor(TFT_WHITE, TFT_BLACK, true);
-        tft.loadFont(Play_Regular18);
-        tft.setCursor(190, 34);
-        tft.printf("%3.0f   ", round(batteryPercentage, 0) );
+        tft.loadFont(Seven_Segment24);
+        tft.setTextColor(COLOR_METER_BACKGROUND, TFT_BLACK);
+        tft.setCursor(253, 170);
+        tft.printf("188");
+        tft.setCursor(253, 170);
+        tft.setTextColor(TFT_WHITE, TFT_BLACK);
+        tft.printf("%3.0f", round(batteryPercentage, 0));
         tft.unloadFont();
-        tft.setPivot(BATTERY_CENTER_X, BATTERY_CENTER_Y);   // set pivot for battery meter
-        drawBatteryMeterNeedle(batteryPercentage);
+        drawBatteryMeter(batteryPercentage);
         // store current battery percentage
         batteryPercentagePrev = batteryPercentage;
     }
     // check if vbat has changed
-    if (!equalFloat(vbat, vbatPrev, 0.1)) {
+    if (!equalFloat(vbat, vbatPrev, 0.1))
+    {
         // draw battery voltage (text)
-        tft.setTextColor(TFT_WHITE, COLOR_BACKGROUND, true);
-        tft.loadFont(Play_Regular16);
-        tft.setCursor(248, 30);
-        tft.printf("V: %3.1f V   ", round(vbat, 1) );
+        tft.loadFont(Seven_Segment24);
+        tft.setTextColor(COLOR_METER_BACKGROUND, TFT_BLACK);
+        tft.setCursor(253, 190);
+        tft.printf("88.8");
+        tft.setCursor(253, 190);
+        tft.setTextColor(TFT_WHITE, TFT_BLACK);
+        tft.printf("%4.1f", round(vbat, 1));
         tft.unloadFont();
         // store current vbat value
         vbatPrev = vbat;
     }
     // check if temp has changed
-    if (!equalFloat(temp, tempPrev, 0.1)) {
-        // draw temps (text)
-        tft.setTextColor(TFT_WHITE, COLOR_BACKGROUND, true);
-        tft.loadFont(Play_Regular16);
-        tft.setCursor(265, 10);
-        tft.printf("%3.1f C  ", round(temp, 1) );
+    if (!equalFloat(temp, tempPrev, 0.1))
+    {
+        // draw temp indicator
+        // draw temp (text)
+        tft.loadFont(Seven_Segment24);
+        tft.setTextColor(COLOR_METER_BACKGROUND, TFT_BLACK);
+        tft.setCursor(1, 178);
+        tft.printf("188.8");
+        tft.setCursor(1, 178);
+        tft.setTextColor(TFT_WHITE, TFT_BLACK);
+        tft.printf("%5.1f", round(temp, 1));
         tft.unloadFont();
+        drawTempMeter(temp);
         // store current temp value
         tempPrev = temp;
     }
 }
 
 /**
- * @brief Draws an indicator needle for the speedometer
- * 
- * @param 
- */
-void drawSpeedometerNeedle(float val) {
-    // draw image where needle was
-    // draw needle in new poition
-    // save position as old position
-    if (val < 0)
-        val = 0;
-    if (val > 35)
-        val = 35;
-
-    int angle = (45 + (val/35) * (220-45)) - 180;
-
-    if (speedometerBufferLoaded) {
-        tft.pushImage(SpMin_x, SpMin_y, 1 + SpMax_x - SpMin_x, 1 + SpMax_y - SpMin_y, speedometerBuffer);
-    }
-
-    if (speedometerNeedle.getRotatedBounds(angle, &SpMin_x, &SpMin_y, &SpMax_x, &SpMax_y)) {
-        // get copy of image where needle will be
-        getImageSelection(speedometerBuffer, SpMin_x, SpMin_y, 1 + SpMax_x - SpMin_x, 1 + SpMax_y - SpMin_y, 
-                            BACKGROUND_WIDTH, BackgroundImage);
-        speedometerBufferLoaded = true;
-    }
-
-    // draw rotated needle in new position
-    speedometerNeedle.pushRotated(angle, TFT_WHITE);
-}
-
-/**
  * @brief Draws an indicator needle for the power meter
- * 
- * @param 
+ *
+ * @param
  */
-void drawPowerMeterNeedles(float val1, float val2) {
-    // draw image where needle was
-    // draw needle in new poition
-    // save position as old position
-    if (val1 < -10)
-        val1 = -10;
-    if (val1 > 25)
-        val1 = 25;
+void drawPowerMeter(float val1, float val2)
+{
+    uint16_t meter1Color = COLOR_METER_REGULAR;
+    uint16_t meter2Color = COLOR_METER_REGULAR_2;
+    // if (val1 < 0)
+    // {
+    //     meter1Color = COLOR_METER_GOOD;
+    //     powerAngle1_prev = 0;
+    // }
 
-    if (val2 < -10)
-        val2 = -10;
-    if (val2 > 25)
-        val2 = 25;
+    // if (val2 < 0)
+    // {
+    //     meter2Color = COLOR_METER_GOOD;
+    //     powerAngle2_prev = 0;
+    // }
 
-    int angle1;
-    int angle2;
+    val1 = abs(val1);
+    val2 = abs(val2);
 
-    if (val1 >= 0)
-        angle1 = (95 + (val1/25) * (220-95)) - 180;
+    val1 = constrain(val1, 0, 6000);
+    val2 = constrain(val2, 0, 6000);
+
+    int angle1 = map(val1, 0, 6000, 45, 315);
+    int angle2 = map(val2, 0, 6000, 45, 315);
+
+    // Update the arc, only the zone between last_angle and new val_angle is updated
+    if (angle1 > powerAngle1_prev)
+    {
+        tft.drawArc(POWER_METER_X, POWER_METER_Y, POWER_METER_RADIUS + POWER_METER_THICKNESS, POWER_METER_RADIUS, powerAngle1_prev, angle1, meter1Color, COLOR_METER_BACKGROUND);
+    }
     else
-        angle1 = (95 + (val1/10) * (95-45)) - 180;
+    {
+        tft.drawArc(POWER_METER_X, POWER_METER_Y, POWER_METER_RADIUS + POWER_METER_THICKNESS, POWER_METER_RADIUS, angle1, powerAngle1_prev, COLOR_METER_BACKGROUND, COLOR_METER_BACKGROUND);
+    }
+    powerAngle1_prev = angle1; // Store meter arc position for next redraw
 
-    if (val2 >= 0)
-        angle2 = (95 + (val2/25) * (220-95)) - 180;
+    // update meter 2
+    if (angle2 > powerAngle2_prev)
+    {
+        tft.drawArc(POWER_METER_X, POWER_METER_Y, POWER_METER_RADIUS + POWER_METER_THICKNESS*2, POWER_METER_RADIUS + POWER_METER_THICKNESS, powerAngle2_prev, angle2, meter2Color, COLOR_METER_BACKGROUND);
+    }
     else
-        angle2 = (95 + (val2/10) * (95-45)) - 180;
-
-    if (powerBuffer1Loaded) {
-        tft.pushImage(PwMin_x1, PwMin_y1, 1 + PwMax_x1 - PwMin_x1, 1 + PwMax_y1 - PwMin_y1, powerBuffer1);
+    {
+        tft.drawArc(POWER_METER_X, POWER_METER_Y, POWER_METER_RADIUS + POWER_METER_THICKNESS*2, POWER_METER_RADIUS + POWER_METER_THICKNESS, angle2, powerAngle2_prev, COLOR_METER_BACKGROUND, COLOR_METER_BACKGROUND);
     }
-
-    if (powerBuffer2Loaded) {
-        tft.pushImage(PwMin_x2, PwMin_y2, 1 + PwMax_x2 - PwMin_x2, 1 + PwMax_y2 - PwMin_y2, powerBuffer2);
-    }
-
-    if (powerNeedle1.getRotatedBounds(angle1, &PwMin_x1, &PwMin_y1, &PwMax_x1, &PwMax_y1)) {
-        // get copy of image where needle will be
-        getImageSelection(powerBuffer1, PwMin_x1, PwMin_y1, 1 + PwMax_x1 - PwMin_x1, 1 + PwMax_y1 - PwMin_y1, 
-                            BACKGROUND_WIDTH, BackgroundImage);
-        powerBuffer1Loaded = true;
-    }
-
-    if (powerNeedle2.getRotatedBounds(angle2, &PwMin_x2, &PwMin_y2, &PwMax_x2, &PwMax_y2)) {
-        // get copy of image where needle will be
-        getImageSelection(powerBuffer2, PwMin_x2, PwMin_y2, 1 + PwMax_x2 - PwMin_x2, 1 + PwMax_y2 - PwMin_y2, 
-                            BACKGROUND_WIDTH, BackgroundImage);
-        powerBuffer2Loaded = true;
-    }
-
-    // draw rotated needle in new position
-    powerNeedle1.pushRotated(angle1, TFT_WHITE);
-    powerNeedle2.pushRotated(angle2, TFT_WHITE);
+    powerAngle2_prev = angle2; // Store meter arc position for next redraw
 }
 
 /**
- * @brief Draws an indicator needle for the battery meter
- * 
- * @param 
+ * @brief Draws the battery meter
+ *
+ * @param
  */
-void drawBatteryMeterNeedle(float val) {
-    // draw image where needle was
-    // draw needle in new poition
-    // save position as old position
-    if (val < 0)
-        val = 0;
-    if (val > 100)
-        val = 100;
+void drawBatteryMeter(float val)
+{
+    uint16_t meterColor = COLOR_METER_GOOD;
 
-    int angle = (135 + (val/100) * (290-135)) - 180;
+    val = constrain(val, 0, 100);
 
-    if (batteryBufferLoaded) {
-        tft.pushImage(BtMin_x, BtMin_y, 1 + BtMax_x - BtMin_x, 1 + BtMax_y - BtMin_y, batteryBuffer);
+    // if (val < 30)
+    // {
+    //     meterColor = COLOR_METER_BAD;
+    // }
+    // else if (val < 50)
+    // {
+    //     meterColor = COLOR_METER_WARNING;
+    // }
+
+    int height = map(val, 0, 100, 160, 0);
+
+    // only draw the are that changed
+    if (height < batteryMeterPrev)
+    {
+        tft.fillRect(BATTERY_X, height+5, 15, 160-height, meterColor);
+    }
+    else
+    {
+        tft.fillRect(BATTERY_X, 5, 15, height, COLOR_METER_BACKGROUND);
     }
 
-    if (batteryNeedle.getRotatedBounds(angle, &BtMin_x, &BtMin_y, &BtMax_x, &BtMax_y)) {
-        // get copy of image where needle will be
-        getImageSelection(batteryBuffer, BtMin_x, BtMin_y, 1 + BtMax_x - BtMin_x, 1 + BtMax_y - BtMin_y, 
-                            BACKGROUND_WIDTH, BackgroundImage);
-        batteryBufferLoaded = true;
-    }
-
-    // draw rotated needle in new position
-    batteryNeedle.pushRotated(angle, TFT_WHITE);
+    batteryMeterPrev = height;    // save height for next redraw
 }
 
 /**
- * @brief Create Speedometer Needle
- * 
- * @param color color of needle
+ * @brief Draws the temperature meter
+ *
+ * @param
  */
-void createSpeedometerNeedle(uint16_t color) {
-    speedometerNeedle.setColorDepth(16);
-    speedometerNeedle.createSprite(5, 35);
+void drawTempMeter(float val)
+{
+    uint16_t meterColor = COLOR_METER_REGULAR;
 
-    speedometerNeedle.fillSprite(TFT_WHITE);
+    // if (val >= 60)
+    // {
+    //     meterColor = COLOR_METER_BAD;
+    // }
 
-    speedometerNeedle.setPivot(5/2, 90);    // set needle pivot point
+    val = constrain(val, 0, 100);
 
-    // draw needle image
-    speedometerNeedle.drawWedgeLine(5/2, 0, 5/2, 35, 1, 5, color, TFT_BLACK);
+    int height = map(val, 0, 100, 160, 0);
 
-    // bounding box
-    int16_t min_x;
-    int16_t min_y;
-    int16_t max_x;
-    int16_t max_y;
+    // only draw the are that changed
+    if (height < tempMeterPrev)
+    {
+        tft.fillRect(TEMP_X, height+5, 15, 160-height, meterColor);
+    }
+    else
+    {
+        tft.fillRect(TEMP_X, 5, 15, height, COLOR_METER_BACKGROUND);
+    }
 
-    // calculate max area that must be stored (occurs at 45deg)
-    speedometerNeedle.getRotatedBounds(45, &min_x, &min_y, &max_x, &max_y);
-    // allocate space for image
-    speedometerBuffer = (uint16_t*)malloc( ((max_x - min_x) + 10) * ((max_y - min_y) + 10) * 2 );
-}
-
- /**
- * @brief Create Power Meter Needle
- * 
- * @param color color of needle
- */
-void createPowerNeedles(uint16_t color1, uint16_t color2) {
-    powerNeedle1.setColorDepth(16);
-    powerNeedle1.createSprite(3, 30);
-    powerNeedle2.setColorDepth(16);
-    powerNeedle2.createSprite(3, 30);
-
-    powerNeedle1.fillSprite(TFT_WHITE);
-    powerNeedle2.fillSprite(TFT_WHITE);
-
-    powerNeedle1.setPivot(3/2, 61);    // set needle pivot point
-    powerNeedle2.setPivot(3/2, 61);
-
-    // draw needle image
-    powerNeedle1.drawWedgeLine(3/2, 0, 3/2, 30, 1, 3, color1, TFT_BLACK);
-    powerNeedle2.drawWedgeLine(3/2, 0, 3/2, 30, 1, 3, color2, TFT_BLACK);
-
-    // bounding box
-    int16_t min_x1;
-    int16_t min_y1;
-    int16_t max_x1;
-    int16_t max_y1;
-
-    int16_t min_x2;
-    int16_t min_y2;
-    int16_t max_x2;
-    int16_t max_y2;
-
-    // calculate max area that must be stored (occurs at 45deg)
-    powerNeedle1.getRotatedBounds(45, &min_x1, &min_y1, &max_x1, &max_y1);
-    powerNeedle2.getRotatedBounds(45, &min_x2, &min_y2, &max_x2, &max_y2);
-    // allocate space for image
-    powerBuffer1 = (uint16_t*)malloc( ((max_x1 - min_x1) + 10) * ((max_y1 - min_y1) + 10) * 2 );
-    powerBuffer2 = (uint16_t*)malloc( ((max_x2 - min_x2) + 10) * ((max_y2 - min_y2) + 10) * 2 );
-}
-
-/**
- * @brief Create battery Meter Needle
- * 
- * @param color color of needle
- */
-void createBatteryNeedle(uint16_t color) {
-    batteryNeedle.setColorDepth(16);
-    batteryNeedle.createSprite(3, 15);
-
-    batteryNeedle.fillSprite(TFT_WHITE);
-
-    batteryNeedle.setPivot(3/2, 40);    // set needle pivot point
-
-    // draw needle image
-    batteryNeedle.drawWedgeLine(3/2, 0, 3/2, 15, 1, 3, color, TFT_BLACK);
-
-    // bounding box
-    int16_t min_x;
-    int16_t min_y;
-    int16_t max_x;
-    int16_t max_y;
-
-    // calculate max area that must be stored (occurs at 45deg)
-    batteryNeedle.getRotatedBounds(45, &min_x, &min_y, &max_x, &max_y);
-    // allocate space for image
-    batteryBuffer = (uint16_t*)malloc( ((max_x - min_x) + 10) * ((max_y - min_y) + 10) * 2 );
+    tempMeterPrev = height;    // save height for next redraw
 }
 
 /**
  * @brief Compares two floats with tolerance
- * 
- * @param n1 
- * @param n2 
+ *
+ * @param n1
+ * @param n2
  * @param epsilon tolerance to check
  * @return true if floats are within tolerance specified by epsilon
  * @return false if not
  */
-bool equalFloat(float n1, float n2, float epsilon) {
-    return std::abs(n1-n2) < epsilon;
+bool equalFloat(float n1, float n2, float epsilon)
+{
+    return std::abs(n1 - n2) < epsilon;
 }
 
 /**
  * @brief Rounds float to specified decimal places
- * 
+ *
  * @param val value to round
  * @param places number of places to round to
  * @return float rounded value
  */
-float round(float val, int places) {
+float round(float val, int places)
+{
     float temp = (int)(val * pow(10, places) + 0.5);
     return (float)(temp / pow(10, places));
 }
 
 /**
  * @brief Gets a subselection of an image
- * 
+ *
  * @param dst destination image pointer
  * @param x0 starting x coord
  * @param y0 starting y coord
@@ -596,24 +499,28 @@ float round(float val, int places) {
  * @param w_src width of src image
  * @param src source image pointer
  */
-void getImageSelection(uint16_t* dst, int16_t x0, int16_t y0, int16_t w_dst, 
-                    int16_t h_dst, int16_t w_src, const uint16_t* src) {
-    const uint16_t* srcPtr = src + ( ((y0) * w_src) + x0 );    // start pointer at starting pixel coords
-    uint16_t* dstPtr = dst;
+void getImageSelection(uint16_t *dst, int16_t x0, int16_t y0, int16_t w_dst,
+                       int16_t h_dst, int16_t w_src, const uint16_t *src)
+{
+    const uint16_t *srcPtr = src + (((y0)*w_src) + x0); // start pointer at starting pixel coords
+    uint16_t *dstPtr = dst;
 
     // loop through dst image size, reset ptr to start of next line after each iteration
-    for (uint16_t i = 0; i < h_dst; i++) {
-        for (uint16_t j = 0; j < w_dst; j++) {
-            *(dst++) = *(srcPtr + j);     // copy pixel from src to dst
+    for (uint16_t i = 0; i < h_dst; i++)
+    {
+        for (uint16_t j = 0; j < w_dst; j++)
+        {
+            *(dst++) = *(srcPtr + j); // copy pixel from src to dst
         }
-        srcPtr += w_src;   // move ptr to next line
+        srcPtr += w_src; // move ptr to next line
     }
 }
 
 /**
  * @brief called when power is lost
- * 
+ *
  */
-void shutdown() {
+void shutdown()
+{
     EEPROM.commit();
 }
