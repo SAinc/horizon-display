@@ -89,6 +89,15 @@ uint16_t powerAngle2_prev = 315;
 uint16_t batteryMeterPrev = 0;
 uint16_t tempMeterPrev = 0;
 
+uint16_t powerMeterColor = COLOR_METER_REGULAR;
+uint16_t powerMeterColor_prev = powerMeterColor;
+
+uint16_t batteryMeterColor = COLOR_METER_GOOD;
+uint16_t batteryMeterColorPrev = batteryMeterColor;
+
+uint16_t tempMeterColor = COLOR_METER_REGULAR;
+uint16_t tempMeterColor_prev = tempMeterColor;
+
 void setup(void)
 {
 #ifdef DEBUG
@@ -349,19 +358,14 @@ void updateDisplay()
  */
 void drawPowerMeter(float val1, float val2)
 {
-    uint16_t meter1Color = COLOR_METER_REGULAR;
-    uint16_t meter2Color = COLOR_METER_REGULAR_2;
-    // if (val1 < 0)
-    // {
-    //     meter1Color = COLOR_METER_GOOD;
-    //     powerAngle1_prev = 0;
-    // }
-
-    // if (val2 < 0)
-    // {
-    //     meter2Color = COLOR_METER_GOOD;
-    //     powerAngle2_prev = 0;
-    // }
+    if (val1 < 0)
+    {
+        powerMeterColor = COLOR_METER_GOOD;
+    }
+    else
+    {
+        powerMeterColor = COLOR_METER_REGULAR;
+    }
 
     val1 = abs(val1);
     val2 = abs(val2);
@@ -372,25 +376,39 @@ void drawPowerMeter(float val1, float val2)
     int angle1 = map(val1, 0, 6000, 45, 315);
     int angle2 = map(val2, 0, 6000, 45, 315);
 
+    // if color has changed, erase active portion first
+    if (powerMeterColor != powerMeterColor_prev)
+    {
+        tft.drawArc(POWER_METER_X, POWER_METER_Y, POWER_METER_RADIUS + POWER_METER_THICKNESS, 
+                    POWER_METER_RADIUS, 45, powerAngle1_prev, powerMeterColor, COLOR_METER_BACKGROUND);
+        tft.drawArc(POWER_METER_X, POWER_METER_Y, POWER_METER_RADIUS + POWER_METER_THICKNESS*2, 
+                    POWER_METER_RADIUS + POWER_METER_THICKNESS, 45, powerAngle2_prev, powerMeterColor, COLOR_METER_BACKGROUND);
+        powerMeterColor_prev = powerMeterColor;
+    }
+
     // Update the arc, only the zone between last_angle and new val_angle is updated
     if (angle1 > powerAngle1_prev)
     {
-        tft.drawArc(POWER_METER_X, POWER_METER_Y, POWER_METER_RADIUS + POWER_METER_THICKNESS, POWER_METER_RADIUS, powerAngle1_prev, angle1, meter1Color, COLOR_METER_BACKGROUND);
+        tft.drawArc(POWER_METER_X, POWER_METER_Y, POWER_METER_RADIUS + POWER_METER_THICKNESS, 
+                    POWER_METER_RADIUS, powerAngle1_prev, angle1, powerMeterColor, COLOR_METER_BACKGROUND);
     }
     else
     {
-        tft.drawArc(POWER_METER_X, POWER_METER_Y, POWER_METER_RADIUS + POWER_METER_THICKNESS, POWER_METER_RADIUS, angle1, powerAngle1_prev, COLOR_METER_BACKGROUND, COLOR_METER_BACKGROUND);
+        tft.drawArc(POWER_METER_X, POWER_METER_Y, POWER_METER_RADIUS + POWER_METER_THICKNESS, 
+                    POWER_METER_RADIUS, angle1, powerAngle1_prev, COLOR_METER_BACKGROUND, COLOR_METER_BACKGROUND);
     }
     powerAngle1_prev = angle1; // Store meter arc position for next redraw
 
     // update meter 2
     if (angle2 > powerAngle2_prev)
     {
-        tft.drawArc(POWER_METER_X, POWER_METER_Y, POWER_METER_RADIUS + POWER_METER_THICKNESS*2, POWER_METER_RADIUS + POWER_METER_THICKNESS, powerAngle2_prev, angle2, meter2Color, COLOR_METER_BACKGROUND);
+        tft.drawArc(POWER_METER_X, POWER_METER_Y, POWER_METER_RADIUS + POWER_METER_THICKNESS*2, 
+                    POWER_METER_RADIUS + POWER_METER_THICKNESS, powerAngle2_prev, angle2, powerMeterColor, COLOR_METER_BACKGROUND);
     }
     else
     {
-        tft.drawArc(POWER_METER_X, POWER_METER_Y, POWER_METER_RADIUS + POWER_METER_THICKNESS*2, POWER_METER_RADIUS + POWER_METER_THICKNESS, angle2, powerAngle2_prev, COLOR_METER_BACKGROUND, COLOR_METER_BACKGROUND);
+        tft.drawArc(POWER_METER_X, POWER_METER_Y, POWER_METER_RADIUS + POWER_METER_THICKNESS*2, 
+                    POWER_METER_RADIUS + POWER_METER_THICKNESS, angle2, powerAngle2_prev, COLOR_METER_BACKGROUND, COLOR_METER_BACKGROUND);
     }
     powerAngle2_prev = angle2; // Store meter arc position for next redraw
 }
@@ -402,25 +420,34 @@ void drawPowerMeter(float val1, float val2)
  */
 void drawBatteryMeter(float val)
 {
-    uint16_t meterColor = COLOR_METER_GOOD;
-
     val = constrain(val, 0, 100);
 
-    // if (val < 30)
-    // {
-    //     meterColor = COLOR_METER_BAD;
-    // }
-    // else if (val < 50)
-    // {
-    //     meterColor = COLOR_METER_WARNING;
-    // }
+    if (val < 20)
+    {
+        batteryMeterColor = COLOR_METER_BAD;
+    }
+    else if (val < 60)
+    {
+        batteryMeterColor = COLOR_METER_WARNING;
+    }
+    else
+    {
+        batteryMeterColor = COLOR_METER_GOOD;
+    }
 
     int height = map(val, 0, 100, 160, 0);
 
-    // only draw the are that changed
+    // if color has changed, redraw completely
+    if (batteryMeterColor != batteryMeterColorPrev)
+    {
+        tft.fillRect(BATTERY_X, batteryMeterPrev+5, 15, 160-batteryMeterPrev, batteryMeterColor);
+        batteryMeterColorPrev = batteryMeterColor;
+    }
+
+    // only draw the section that changed
     if (height < batteryMeterPrev)
     {
-        tft.fillRect(BATTERY_X, height+5, 15, 160-height, meterColor);
+        tft.fillRect(BATTERY_X, height+5, 15, 160-height, batteryMeterColor);
     }
     else
     {
@@ -437,21 +464,30 @@ void drawBatteryMeter(float val)
  */
 void drawTempMeter(float val)
 {
-    uint16_t meterColor = COLOR_METER_REGULAR;
-
-    // if (val >= 60)
-    // {
-    //     meterColor = COLOR_METER_BAD;
-    // }
+    if (val >= 60)
+    {
+        tempMeterColor = COLOR_METER_BAD;
+    }
+    else
+    {
+        tempMeterColor = COLOR_METER_REGULAR;
+    }
 
     val = constrain(val, 0, 100);
 
     int height = map(val, 0, 100, 160, 0);
 
-    // only draw the are that changed
+    // if color has changed, redraw completely
+    if (tempMeterColor != tempMeterColor_prev)
+    {
+        tft.fillRect(TEMP_X, tempMeterPrev+5, 15, 160-tempMeterPrev, tempMeterColor);
+        tempMeterColor_prev = tempMeterColor;
+    }
+
+    // only draw the section that changed
     if (height < tempMeterPrev)
     {
-        tft.fillRect(TEMP_X, height+5, 15, 160-height, meterColor);
+        tft.fillRect(TEMP_X, height+5, 15, 160-height, tempMeterColor);
     }
     else
     {
