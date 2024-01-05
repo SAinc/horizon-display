@@ -14,19 +14,20 @@
  #define TEST
 
 // DEFINES
-#define LOOP_PERIOD 35 // loop period in ms
-#define PIN_TX 28      // UART tx pin
-#define PIN_RX 29      // UART rx pin
+#define LOOP_PERIOD         35                  // loop period in ms
+#define PIN_TX              28                  // UART tx pin
+#define PIN_RX              29                  // UART rx pin
 #define PIN_POWER
-#define TIMEOUT_MS 100        // timeout for recv
-#define BAUD 115200           // baudrate for VESC UART
-#define NUM_CELLS 14          // number of battery cells
-#define V_MAX NUM_CELLS * 4.2 // max battery voltage
-#define V_MIN NUM_CELLS * 3.2 // min battery voltage
-#define WHEEL_DIA 285.75      // wheel diameter in mm
-#define NUM_MAGNETS 30        // number of magnets on the stator
-#define CAN_ID_1 0            // CAN id of first controller
-#define CAN_ID_2 85           // CAN id of second controller
+#define TIMEOUT_MS          100                 // timeout for recv
+#define BAUD                115200              // baudrate for VESC UART
+#define NUM_CELLS           14                  // number of battery cells
+#define V_MAX               NUM_CELLS * 4.2     // max battery voltage
+#define V_MIN               NUM_CELLS * 3.2     // min battery voltage
+#define WHEEL_DIA           285.75              // wheel diameter in mm
+#define NUM_MAGNETS         30                  // number of magnets on the stator
+#define CAN_ID_1            0                   // CAN id of first controller
+#define CAN_ID_2            85                  // CAN id of second controller
+#define BATTERY_CAPACITY    1398.6              // capacity of battery in Wh
 
 // COLORS
 #define COLOR_METER_BACKGROUND 0x18c3     // 0x1a1a1a
@@ -64,12 +65,14 @@ VescUart vesc(100);
 uint32_t updateTime = 0; // time for next update
 float batteryPercentage = 0;
 float tripCounter = 0;
-float odometer = 772.5;
+float odometer = 10;
 float power1 = 0;
 float power2 = 0;
 float speed_mph = 0;
 float vbat = 0;
 float temp = 0;
+float batteryCurrentCapacity = 0;
+bool batteryFull = false;
 
 float powerSamples[NUM_SAMPLES_POWER] = {0};
 uint16_t powerSampleIndex = 0;
@@ -145,8 +148,9 @@ void setup(void)
     // draw initial background image
     tft.pushImage(0, 0, BACKGROUND_WIDTH, BACKGROUND_HEIGHT, BackgroundImage);
 
-    // restore odometer value
+    // restore odometer value and battery capacity
     // EEPROM.get(EEPROM_ADDR, odometer);
+    // EEPROM.get(EEPROM_ADDR + sizeof(odometer), batteryCurrentCapacity);
 }
 
 void loop(void)
@@ -199,9 +203,32 @@ int getProcessTelemData()
     // only recalculate if we have an update
     if (vesc.getVescValues(CAN_ID_1))
     {
-        // calculate battery percent
-        batteryPercentage = (vesc.data.inpVoltage - V_MIN) / (V_MAX - V_MIN) * 100;
         vbat = vesc.data.inpVoltage;
+
+        // reset battery capacity tracking when battery is full
+        if (equalFloat(vbat, V_MAX, 1) && !batteryFull)
+        {
+            batteryCurrentCapacity = BATTERY_CAPACITY;
+            batteryFull = true;
+        }
+        // allow battery capacity to be reset if battery is below full threshold by 3v
+        // (prevents capacity from constantly being reset)
+        else if (!equalFloat(vbat, V_MAX, 3))
+        {
+            batteryFull = false;
+        }
+
+        // track battery capacity reported by VESC
+        batteryCurrentCapacity -= vesc.data.ampHours;
+        batteryCurrentCapacity += vesc.data.ampHoursCharged;
+        if (batteryCurrentCapacity > BATTERY_CAPACITY)
+            batteryCurrentCapacity = BATTERY_CAPACITY;
+        else if (batteryCurrentCapacity < 0)
+            batteryCurrentCapacity = 0;
+
+        // calculate battery percentage
+        batteryPercentage = batteryCurrentCapacity / BATTERY_CAPACITY * 100;
+        
         // calculate motor power
         power1 = vesc.data.inpVoltage * vesc.data.avgMotorCurrent;
 
@@ -222,12 +249,10 @@ int getProcessTelemData()
         speed_mph = vesc.data.rpm / (NUM_MAGNETS / 2) * CONVERSION_FACTOR_MPH;
         // calculate trip distance
         tripCounter = vesc.data.tachometer / (3 * (NUM_MAGNETS)) * CONVERSION_FACTOR_MI;
-        // calculate and store odometer every 0.1mi
-        // EEPROM.put(EEPROM_ADDR, odometer);
+
         temp = vesc.data.tempMosfet;
         vesc.getVescValues(CAN_ID_2);
         power2 = vesc.data.inpVoltage * vesc.data.avgMotorCurrent;
-        // power2 = 0;
 
         return 1;
     }
@@ -249,6 +274,7 @@ void updateDisplay()
         tft.printf("%7.1f", round(odometer, 1));
         tft.unloadFont();
         // store current odometer value
+        // EEPROM.put(EEPROM_ADDR, odometer);
         odometerPrev = odometer;
     }
     // check if trip counter has changed
@@ -301,7 +327,7 @@ void updateDisplay()
         power2Prev = power2;
     }
     // check if battery has changed
-    if (!equalFloat(batteryPercentage, batteryPercentagePrev, 1))
+    if (!equalFloat(batteryPercentage, batteryPercentagePrev, 0.5))
     {
         // draw battery meter
         // draw battery percent (text)
@@ -315,6 +341,7 @@ void updateDisplay()
         tft.unloadFont();
         drawBatteryMeter(batteryPercentage);
         // store current battery percentage
+        // EEPROM.put(EEPROM_ADDR + sizeof(odometer), batteryCurrentCapacity);
         batteryPercentagePrev = batteryPercentage;
     }
     // check if vbat has changed
